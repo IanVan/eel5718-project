@@ -11,17 +11,7 @@
 
 #define PORT "3490" // the port client will be connecting to 
 
-#define MAXDATASIZE 100 // max number of bytes we can get at once 
-
-// get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
+#define MAXDATASIZE 1024 // max number of bytes we can get at once 
 
 addrinfo* create_connection(addrinfo *servinfo, int &sock){
     addrinfo* temp;
@@ -58,7 +48,7 @@ int main(int argc, char *argv[])
     }
 
     memset(&connection, 0, sizeof connection);
-    connection.ai_family = AF_UNSPEC; // Using IPv6
+    connection.ai_family = AF_UNSPEC;
     connection.ai_socktype = SOCK_STREAM;
 
     if ((status = getaddrinfo(argv[1], PORT, &connection, &servinfo)) != 0) {
@@ -73,9 +63,9 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char ip[INET6_ADDRSTRLEN];
+    char ip[INET_ADDRSTRLEN];
 
-    inet_ntop(connected->ai_family, get_in_addr((struct sockaddr *)connected->ai_addr), ip, sizeof ip);
+    inet_ntop(connected->ai_family, ((struct sockaddr_in*)connected->ai_addr), ip, sizeof ip);
     printf("client: connecting to %s\n", ip);
 
     freeaddrinfo(servinfo); // all done with this structure
