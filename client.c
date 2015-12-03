@@ -9,10 +9,11 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define PORT "3490" // the port client will be connecting to 
+#define PORT "3490"
 
-#define MAXDATASIZE 1024 // max number of bytes we can get at once 
+#define MAXDATASIZE 1024 // Max number of bytes that can be received
 
+// Initializes the connection
 addrinfo* create_connection(addrinfo *servinfo, int &sock){
     addrinfo* temp;
 
@@ -36,10 +37,9 @@ addrinfo* create_connection(addrinfo *servinfo, int &sock){
 int main(int argc, char *argv[])
 {
     int sockfd, numbytes;  
-    char buffer[MAXDATASIZE];
-    struct addrinfo connection;
-    struct addrinfo *servinfo;
-    struct addrinfo *connected;
+    struct addrinfo connection; // Defines the connection type
+    struct addrinfo *servinfo; // Contains structs for making connection
+    struct addrinfo *connected; // Stores result of connection operation
     int status;
 
     if (argc != 2) {
@@ -48,15 +48,16 @@ int main(int argc, char *argv[])
     }
 
     memset(&connection, 0, sizeof connection);
-    connection.ai_family = AF_UNSPEC;
-    connection.ai_socktype = SOCK_STREAM;
+    connection.ai_family = AF_INET; // Using IPv4
+    connection.ai_socktype = SOCK_STREAM; // TCP connection
+
 
     if ((status = getaddrinfo(argv[1], PORT, &connection, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
         return 1;
     }
 
-    connected = create_connection(servinfo, sockfd);
+    connected = create_connection(servinfo, sockfd); // Sets up the actual connection
 
     if (connected == NULL) {
         fprintf(stderr, "client: failed to connect\n");
@@ -65,13 +66,24 @@ int main(int argc, char *argv[])
 
     char ip[INET_ADDRSTRLEN];
 
-    inet_ntop(connected->ai_family, ((struct sockaddr_in*)connected->ai_addr), ip, sizeof ip);
+    inet_ntop(connected->ai_family, ((struct sockaddr_in*)connected->ai_addr), ip, sizeof ip); // Create aan IP address
     printf("client: connecting to %s\n", ip);
 
-    freeaddrinfo(servinfo); // all done with this structure
+    freeaddrinfo(servinfo); // Dlete this struct
+
+    char buffer[MAXDATASIZE]; // Buffer for receiving sent data.
+
+    struct timeval timeout;
+    timeout.tv_sec = 10;
+    timeout.tv_sec = 0;
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) != 0)
+    //int damn = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
+    //if (damn != 0)
+        perror("Receive Timeout");
 
     if ((numbytes = recv(sockfd, buffer, MAXDATASIZE-1, 0)) == -1) {
-        perror("recv");
+        perror("Receive exceeds max data limit, modify MAXDATASIZE for larger messages.");
         return 1;
     }
 

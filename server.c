@@ -55,6 +55,12 @@ addrinfo* bind_connection(addrinfo *servinfo, int &sock){
 
 }
 
+void sendstring(int sock, char* string){
+    if (send(sock, string, strlen(string), 0) == -1){ //Transmit data, which is stored as a char pointer
+        perror("send");
+    }
+}
+
 int main(int argc, char *argv[])
 {
     int sockfd, new_fd;  // Listen on sock_fd, new connection on new_fd
@@ -72,12 +78,12 @@ int main(int argc, char *argv[])
     }
 
     memset(&connection, 0, sizeof connection);
-    connection.ai_family = AF_UNSPEC; // Using IPv6
+    connection.ai_family = AF_INET; // Using IPv4
     connection.ai_socktype = SOCK_STREAM; // Connect using TCP 
     connection.ai_flags = AI_PASSIVE; // Automatically detect IP of system running server
 
     int status;
-    if ((status = getaddrinfo(NULL, PORT, &connection, &servinfo)) != 0) {
+    if ((status = getaddrinfo(NULL, PORT, &connection, &servinfo)) != 0) { // Check to make sure addrinfo struct was initalized properly
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
         return 1;
     }
@@ -105,7 +111,7 @@ int main(int argc, char *argv[])
     act.sa_flags = SA_RESTART;
 
     if (sigaction(SIGCHLD, &act, NULL) == -1) {
-        perror("sigaction");
+        perror("Error deleting zombie processes"); // Clean up the zombies
         return 1;
     }
 
@@ -117,21 +123,20 @@ int main(int argc, char *argv[])
         sin_size = sizeof client_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
         if (new_fd == -1) {
-            perror("accept");
+            perror("accept connection failed");
             continue;
         }
 
         inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
         printf("server: got connection from %s\n", ip);
 
-        if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
-            if (send(new_fd, argv[1], strlen(argv[1]), 0) == -1)
-                perror("send");
-            close(new_fd);
+        if (!fork()) { // This is the child process
+            close(sockfd); // Child process does not need alistener
+            sendstring(new_fd, argv[1]);
+            close(new_fd); // Close socket after completion.
             return 0;
         }
-        close(new_fd);  // parent doesn't need this
+        close(new_fd);
     }
 
     return 0;
