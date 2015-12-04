@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
     char file_size[256];
     struct stat file_stats;
 
-    if(argc != 3){
+    if(argc < 2){
         fprintf(stderr, "usage: server message f/t\n");
         return 1;
     }
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // Delete struct
 
-    if(*argv[2] == 'f'){
+    if((argc == 2) && (*argv[1] == 'f')){
         if((file = open(FILE_NAME, O_RDONLY)) == -1){
             perror("file open error");
             return 1;
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
     char ip[INET_ADDRSTRLEN];
 
     //Now send the rest of the file
-    if(*argv[2] == 't'){
+    if((argc == 3) && (*argv[2] == 't')){
         
         /* prep for encyption*/
 
@@ -211,57 +211,48 @@ int main(int argc, char *argv[])
             close(new_fd);
         }
     }
-    else if(*argv[2] == 'f'){
+    else if((argc == 2) && (*argv[1] == 'f')){
+        sprintf(file_size, "%d", (int)file_stats.st_size);
         //First we send the size of the file
         sin_size = sizeof client_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
         if (new_fd == -1) {
             perror("accept connection failed");
+            return 0;
         }
 
         inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
+
         printf("server: got connection from %s\n", ip);
 
-        if (!fork()) { // This is the child process
-            close(sockfd); // Child process does not need alistener
-            if (send(new_fd, file_size, sizeof(file_size), 0) == -1){ //Transmit data, which is stored as a char pointer
-                perror("sending file size");
-            }
-            close(new_fd); // Close socket after completion.
-            return 0;
+        int sent = send(new_fd, file_size, sizeof(file_size), 0);
+        if ( sent == -1){ //Transmit data, which is stored as a char pointer
+            perror("sending file size");
         }
+
+        printf("File size: %d\n", atoi(file_size));
+
+        off_t offset = 0;
+        sent = 0;
+        int remaining_data = file_stats.st_size;
+        printf("remaining_data = %d\n", remaining_data);
+        //Open the file using read(), encrypt it, then write(), pretty sure that will work for passing it to the sendfile function.
+        //Alternatively look into openssl like we talked about.
+
+
+
+        while(((sent = sendfile(new_fd, file, &offset, BUFSIZ)) > 0) && (remaining_data > 0)){
+            printf("Sent %d bytes, offset = %d, %d bytes left\n", sent, (int)offset, remaining_data);
+            remaining_data -= sent;
+        }
+        if(sent == -1){
+            perror("Sendfile");
+        }
+        printf("Sent\n");
+        printf("remaining_data = %d\n", remaining_data);
+        close(sockfd); // Child process does not need alistener
         close(new_fd);
 
-        while(1) {  // Accept connection
-            sin_size = sizeof client_addr;
-            new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
-            if (new_fd == -1) {
-                perror("accept connection failed");
-                continue;
-            }
-
-            inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
-            printf("server: got connection from %s\n", ip);
-
-            if (!fork()) { // This is the child process
-                close(sockfd); // Child process does not need alistener
-                //NEw file sending code here
-
-                int offset = 0;
-                int sent = 0;
-                int remaining_data = file_stats.st_size;
-
-                while(((sent = sendfile(new_fd, file, (off_t*)&offset, BUFSIZ)) > 0) && (remaining_data > 0)){
-                    fprintf(stdout, "Sent %d bytes, offset = %d, %d bytes left\n", sent, offset, remaining_data);
-                    remaining_data -= sent;
-                }
-
-                
-                close(new_fd); // Close socket after completion.
-                return 0;
-            }
-            close(new_fd);
-        }
     }
     return 0;
 }

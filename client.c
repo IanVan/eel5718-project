@@ -27,7 +27,7 @@ iv =692E3E442B68A2E2A89D3D4DAC7A418D
 #define IV "692E3E442B68A2E2A89D3D4DAC7A418D"
 
 #define PORT "3490"
-#define MAXDATASIZE 1024 // Max number of bytes that can be received
+#define OUTPUT_FILE_NAME "mesg.txt"
 
 /* Deccryption Function */
 int strdecrypt(unsigned char *inputstr, int inputstrlen, unsigned char *key, unsigned char *iv, unsigned char *decout) {
@@ -71,8 +71,8 @@ int main(int argc, char *argv[])
     struct addrinfo *connected; // Stores result of connection operation
     int status;
 
-    if (argc != 2) {
-        fprintf(stderr,"usage: client hostname\n");
+    if (argc != 3) {
+        fprintf(stderr,"usage: client hostname f/t\n");
         return 1;
     }
 
@@ -100,28 +100,63 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // Dlete this struct
 
-    unsigned char buffer[MAXDATASIZE]; // Buffer for receiving sent data.
+    if(*argv[2] == 'f'){
+        char buffer[BUFSIZ];
 
-    if ((numbytes = recv(sockfd, buffer, MAXDATASIZE-1, 0)) == -1) {
-        perror("Receive exceeds max data limit, modify MAXDATASIZE for larger messages.");
-        return 1;
+        recv(sockfd, buffer, BUFSIZ-1, 0);
+        int file_size = atoi(buffer);
+
+        printf("File size: %d\n", file_size);
+
+        FILE *received_file = fopen(OUTPUT_FILE_NAME, "w");
+
+        if(received_file == NULL){
+            perror("File not received");
+            return 1;
+        }
+
+        int remaining_data = file_size;
+
+        while(((numbytes = recv(sockfd, buffer, BUFSIZ-1, 0) > 0) && (remaining_data > 0))) {
+            printf("%s\n", buffer);
+            //Decrypt the buffere here!
+
+
+            int test = fwrite(&buffer, sizeof(char), file_size, received_file);
+            printf("Bytes written %d\n", test);
+            if(test < numbytes){
+                perror("Write fail");
+            }
+            remaining_data -= numbytes;
+            printf("Received");
+        }
+        fclose(received_file);
+
     }
-    /* prep for encyption*/
 
-    unsigned char *key = (unsigned char *)KEY; //key pointer
-    unsigned char *iv = (unsigned char *)IV; // IV pointer
-    //initializations
-    OpenSSL_add_all_algorithms(); //
-    OPENSSL_config(NULL);   //
-    unsigned char output[MAXDATASIZE];
-    
-    int outlen = strdecrypt(buffer, numbytes, key, iv, output);
+    else if(*argv[2] == 't'){
+        unsigned char buffer[BUFSIZ]; // Buffer for receiving sent data.
 
-    output[outlen] = '\0';
+        if ((numbytes = recv(sockfd, buffer, BUFSIZ-1, 0)) == -1) {
+            perror("Receive exceeds max data limit, modify MAXDATASIZE for larger messages.");
+            return 1;
+        }
+        /* prep for encyption*/
 
-    printf("client: received '%s'\n",output);
+        unsigned char *key = (unsigned char *)KEY; //key pointer
+        unsigned char *iv = (unsigned char *)IV; // IV pointer
+        //initializations
+        OpenSSL_add_all_algorithms(); //
+        OPENSSL_config(NULL);   //
+        unsigned char output[BUFSIZ];
+        
+        int outlen = strdecrypt(buffer, numbytes, key, iv, output);
 
-    close(sockfd);
+        output[outlen] = '\0';
 
+        printf("client: received '%s'\n",output);
+
+        close(sockfd);
+    }
     return 0;
 }
