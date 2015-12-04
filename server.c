@@ -14,9 +14,13 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <sys/sendfile.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define PORT "3490"
 #define BACKLOG 10     // how many pending connections queue will hold
+#define FILE_NAME "test.txt"
 
 void sigchld_handler(int s)
 {
@@ -64,6 +68,7 @@ void sendstring(int sock, char* string){
 int main(int argc, char *argv[])
 {
     int sockfd, new_fd;  // Listen on sock_fd, new connection on new_fd
+    int file;
 
     struct addrinfo connection; // Will define the connection type
     struct addrinfo *servinfo; // Contains structs for making connection - created by getaddrinfo()
@@ -71,6 +76,9 @@ int main(int argc, char *argv[])
 
     struct sockaddr_storage client_addr; // Connector address information
     socklen_t sin_size;
+
+    char file_size[256];
+    struct stat file_stats;
 
     if(argc != 2){
         fprintf(stderr, "usage: server message\n");
@@ -97,6 +105,18 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    if((file = open(FILE_NAME, O_RDONLY)) == -1){
+        perror("file open error");
+        return 1;
+    }
+
+    if(fstat(file, &file_stats) == -1){
+        perror("file stat");
+        return 1;
+    }
+
+
+
     if (listen(sockfd, BACKLOG) == -1) {
         perror("listen");
         return 1;
@@ -111,7 +131,7 @@ int main(int argc, char *argv[])
     act.sa_flags = SA_RESTART;
 
     if (sigaction(SIGCHLD, &act, NULL) == -1) {
-        perror("Error deleting zombie processes"); // Clean up the zombies
+        perror("Error deleting zombie processes\n"); // Clean up the zombies
         return 1;
     }
 
@@ -119,12 +139,34 @@ int main(int argc, char *argv[])
 
     char ip[INET_ADDRSTRLEN];
 
-    while(1) {  // Accept connection
+    //Now send the rest of the file
+    if(*argv[2] == 't'){
+        while(1) {  // Accept connection
+            sin_size = sizeof client_addr;
+            new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
+            if (new_fd == -1) {
+                perror("accept connection failed");
+                continue;
+            }
+
+            inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
+            printf("server: got connection from %s\n", ip);
+
+            if (!fork()) { // This is the child process
+                close(sockfd); // Child process does not need alistener
+                sendstring(new_fd, argv[1]);
+                close(new_fd); // Close socket after completion.
+                return 0;
+            }
+            close(new_fd);
+        }
+    }
+    else if(*argv[2] == 'f'){
+        //First we send the size of the file
         sin_size = sizeof client_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
         if (new_fd == -1) {
             perror("accept connection failed");
-            continue;
         }
 
         inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
@@ -132,11 +174,44 @@ int main(int argc, char *argv[])
 
         if (!fork()) { // This is the child process
             close(sockfd); // Child process does not need alistener
-            sendstring(new_fd, argv[1]);
+            if (send(new_fd, file_size, sizeof(file_size), 0) == -1){ //Transmit data, which is stored as a char pointer
+                perror("sending file size");
+            }
             close(new_fd); // Close socket after completion.
             return 0;
         }
         close(new_fd);
+
+        while(1) {  // Accept connection
+            sin_size = sizeof client_addr;
+            new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
+            if (new_fd == -1) {
+                perror("accept connection failed");
+                continue;
+            }
+
+            inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
+            printf("server: got connection from %s\n", ip);
+
+            if (!fork()) { // This is the child process
+                close(sockfd); // Child process does not need alistener
+                //NEw file sending code here
+
+                int offset = 0;
+                int sent = 0;
+                int remaining_data = file_stats.st_size;
+
+                while(((sent = sendfile(new_fd, file, &offset, BUFSIZ)) > 0) && (remaining_data > 0)){
+                    fprintf(stdout, "Sent %d bytes, offset = %d, %d bytes left\n", sent, offset, remaining_data);
+                    remaining_data -= sent;
+                }
+
+                
+                close(new_fd); // Close socket after completion.
+                return 0;
+            }
+            close(new_fd);
+        }
     }
 
     return 0;
