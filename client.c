@@ -73,15 +73,6 @@ int main(int argc, char *argv[])
 
     char buffer[MAXDATASIZE]; // Buffer for receiving sent data.
 
-    struct timeval timeout;
-    timeout.tv_sec = 10;
-    timeout.tv_sec = 0;
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) != 0)
-    //int damn = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
-    //if (damn != 0)
-        perror("Receive Timeout");
-
     if ((numbytes = recv(sockfd, buffer, MAXDATASIZE-1, 0)) == -1) {
         perror("Receive exceeds max data limit, modify MAXDATASIZE for larger messages.");
         return 1;
