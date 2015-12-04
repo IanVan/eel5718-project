@@ -18,9 +18,41 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+ //
+ /*ENCRYPTION*/
+
+#include <openssl/conf.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+
+// keys should be hidden
+/*
+ openssl enc -aes-192-cbc -k secret -P -md sha1
+salt=577F1C618F640145
+key=EE94A22BBAA41EC0B8317105C65C5169CA14171D43E650C6
+iv =692E3E442B68A2E2A89D3D4DAC7A418D
+*/
+
+#define KEY "EE94A22BBAA41EC0B8317105C65C5169CA14171D43E650C6"
+#define IV "692E3E442B68A2E2A89D3D4DAC7A418D"
+
 #define PORT "3490"
 #define BACKLOG 10     // how many pending connections queue will hold
 #define FILE_NAME "test.txt"
+
+/* encryption function */
+
+int strencrypt(unsigned char *inputstr, int inputstrlen, unsigned char *key, unsigned char *iv, unsigned char *encout){
+    int inlen, encoutlen;
+    EVP_CIPHER_CTX *strenccontext = EVP_CIPHER_CTX_new(); //setup context
+    EVP_EncryptInit_ex(strenccontext, EVP_aes_192_cbc(), NULL, key, iv); // configure encryption options
+    EVP_EncryptUpdate(strenccontext, encout, &inlen, inputstr, inputstrlen);
+    encoutlen = inlen;
+    EVP_EncryptFinal_ex(strenccontext, encout + inlen, &inlen);
+    encoutlen += inlen;
+    EVP_CIPHER_CTX_free(strenccontext);
+    return encoutlen;
+}
 
 void sigchld_handler(int s)
 {
@@ -59,8 +91,8 @@ addrinfo* bind_connection(addrinfo *servinfo, int &sock){
 
 }
 
-void sendstring(int sock, char* string){
-    if (send(sock, string, strlen(string), 0) == -1){ //Transmit data, which is stored as a char pointer
+void sendstring(int sock, unsigned char* string, int len){
+    if (send(sock, string, len, 0) == -1){ //Transmit data, which is stored as a char pointer
         perror("send");
     }
 }
@@ -141,6 +173,22 @@ int main(int argc, char *argv[])
 
     //Now send the rest of the file
     if(*argv[2] == 't'){
+        
+        /* prep for encyption*/
+
+        unsigned char *key = (unsigned char *)KEY; //key pointer
+        unsigned char *iv = (unsigned char *)IV; // IV pointer
+        //initializations
+        OpenSSL_add_all_algorithms(); //
+        OPENSSL_config(NULL);   //
+        
+        // set up input to be encrypted
+        unsigned char *inputstr = (unsigned char *)argv[1]; 
+        // set up output to be sent to client
+        unsigned char sendbuff[2048];
+        int outlen = strencrypt(inputstr, strlen ((char *)inputstr), key, iv, sendbuff);
+        //BIO_dump_fp (stdout, (const char *)sendbuff, outlen);
+
         while(1) {  // Accept connection
             sin_size = sizeof client_addr;
             new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
@@ -154,7 +202,7 @@ int main(int argc, char *argv[])
 
             if (!fork()) { // This is the child process
                 close(sockfd); // Child process does not need alistener
-                sendstring(new_fd, argv[1]);
+                sendstring(new_fd, sendbuff, outlen);
                 close(new_fd); // Close socket after completion.
                 return 0;
             }
