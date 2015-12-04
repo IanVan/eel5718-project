@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
                 int sent = 0;
                 int remaining_data = file_stats.st_size;
 
-                while(((sent = sendfile(new_fd, file, &offset, BUFSIZ)) > 0) && (remaining_data > 0)){
+                while(((sent = sendfile(new_fd, file, (off_t*)&offset, BUFSIZ)) > 0) && (remaining_data > 0)){
                     fprintf(stdout, "Sent %d bytes, offset = %d, %d bytes left\n", sent, offset, remaining_data);
                     remaining_data -= sent;
                 }
