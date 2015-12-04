@@ -9,9 +9,38 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#define PORT "3490"
+/*ENCRYPTION*/
 
+#include <openssl/conf.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+
+// keys should be hidden
+/*
+ openssl enc -aes-192-cbc -k secret -P -md sha1
+salt=577F1C618F640145
+key=EE94A22BBAA41EC0B8317105C65C5169CA14171D43E650C6
+iv =692E3E442B68A2E2A89D3D4DAC7A418D
+*/
+
+#define KEY "EE94A22BBAA41EC0B8317105C65C5169CA14171D43E650C6"
+#define IV "692E3E442B68A2E2A89D3D4DAC7A418D"
+
+#define PORT "3490"
 #define MAXDATASIZE 1024 // Max number of bytes that can be received
+
+/* Deccryption Function */
+int strdecrypt(unsigned char *inputstr, int inputstrlen, unsigned char *key, unsigned char *iv, unsigned char *decout) {
+    int inlen, decoutlen;
+    EVP_CIPHER_CTX *strdeccontext = EVP_CIPHER_CTX_new();
+    EVP_DecryptInit_ex(strdeccontext, EVP_aes_192_cbc(), NULL, key, iv);
+    EVP_DecryptUpdate(strdeccontext, decout, &inlen, inputstr, inputstrlen);
+    decoutlen = inlen;
+    EVP_DecryptFinal_ex(strdeccontext, decout + inlen, &inlen);
+    decoutlen += inlen;
+    EVP_CIPHER_CTX_free(strdeccontext);
+    return decoutlen;
+}
 
 // Initializes the connection
 addrinfo* create_connection(addrinfo *servinfo, int &sock){
@@ -71,16 +100,26 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // Dlete this struct
 
-    char buffer[MAXDATASIZE]; // Buffer for receiving sent data.
+    unsigned char buffer[MAXDATASIZE]; // Buffer for receiving sent data.
 
     if ((numbytes = recv(sockfd, buffer, MAXDATASIZE-1, 0)) == -1) {
         perror("Receive exceeds max data limit, modify MAXDATASIZE for larger messages.");
         return 1;
     }
+    /* prep for encyption*/
 
-    buffer[numbytes] = '\0';
+    unsigned char *key = (unsigned char *)KEY; //key pointer
+    unsigned char *iv = (unsigned char *)IV; // IV pointer
+    //initializations
+    OpenSSL_add_all_algorithms(); //
+    OPENSSL_config(NULL);   //
+    unsigned char output[MAXDATASIZE];
+    
+    int outlen = strdecrypt(buffer, numbytes, key, iv, output);
 
-    printf("client: received '%s'\n",buffer);
+    output[outlen] = '\0';
+
+    printf("client: received '%s'\n",output);
 
     close(sockfd);
 
