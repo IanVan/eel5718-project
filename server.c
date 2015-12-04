@@ -99,7 +99,6 @@ void sendstring(int sock, unsigned char* string, int len){
 
 int main(int argc, char *argv[])
 {
-    char flag = *argv[2];
     int sockfd, new_fd;  // Listen on sock_fd, new connection on new_fd
     int file;
 
@@ -133,11 +132,7 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // Delete struct
 
-    if (bound == NULL)  {
-        fprintf(stderr, "server: failed to bind\n");
-        return 1;
-    }
-    if(flag = 'f'){
+    if(*argv[2] == 'f'){
         if((file = open(FILE_NAME, O_RDONLY)) == -1){
             perror("file open error");
             return 1;
@@ -147,6 +142,11 @@ int main(int argc, char *argv[])
             perror("file stat");
             return 1;
         }
+    }
+
+    if (bound == NULL)  {
+        fprintf(stderr, "server: failed to bind\n");
+        return 1;
     }
 
     if (listen(sockfd, BACKLOG) == -1) {
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
     char ip[INET_ADDRSTRLEN];
 
     //Now send the rest of the file
-    if(flag == 't'){
+    if(*argv[2] == 't'){
         
         /* prep for encyption*/
 
@@ -188,6 +188,7 @@ int main(int argc, char *argv[])
         // set up output to be sent to client
         unsigned char sendbuff[2048];
         int outlen = strencrypt(inputstr, strlen ((char *)inputstr), key, iv, sendbuff);
+        printf("Encrypted string: %s\n", sendbuff);
         //BIO_dump_fp (stdout, (const char *)sendbuff, outlen);
 
         while(1) {  // Accept connection
@@ -210,7 +211,7 @@ int main(int argc, char *argv[])
             close(new_fd);
         }
     }
-    else if(flag == 'f'){
+    else if(*argv[2] == 'f'){
         //First we send the size of the file
         sin_size = sizeof client_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
@@ -262,6 +263,5 @@ int main(int argc, char *argv[])
             close(new_fd);
         }
     }
-
     return 0;
 }
