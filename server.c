@@ -38,7 +38,7 @@ iv =692E3E442B68A2E2A89D3D4DAC7A418D
 
 #define PORT "3490"
 #define BACKLOG 10     // how many pending connections queue will hold
-#define FILE_NAME "test.txt"
+#define FILE_NAME "test_msg.txt"
 
 /* encryption function */
 
@@ -99,6 +99,7 @@ void sendstring(int sock, unsigned char* string, int len){
 
 int main(int argc, char *argv[])
 {
+    char flag = *argv[2];
     int sockfd, new_fd;  // Listen on sock_fd, new connection on new_fd
     int file;
 
@@ -112,8 +113,8 @@ int main(int argc, char *argv[])
     char file_size[256];
     struct stat file_stats;
 
-    if(argc != 2){
-        fprintf(stderr, "usage: server message\n");
+    if(argc != 3){
+        fprintf(stderr, "usage: server message f/t\n");
         return 1;
     }
 
@@ -136,23 +137,23 @@ int main(int argc, char *argv[])
         fprintf(stderr, "server: failed to bind\n");
         return 1;
     }
+    if(flag = 'f'){
+        if((file = open(FILE_NAME, O_RDONLY)) == -1){
+            perror("file open error");
+            return 1;
+        }
 
-    if((file = open(FILE_NAME, O_RDONLY)) == -1){
-        perror("file open error");
-        return 1;
+        if(fstat(file, &file_stats) == -1){
+            perror("file stat");
+            return 1;
+        }
     }
-
-    if(fstat(file, &file_stats) == -1){
-        perror("file stat");
-        return 1;
-    }
-
-
 
     if (listen(sockfd, BACKLOG) == -1) {
         perror("listen");
         return 1;
     }
+
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -172,7 +173,7 @@ int main(int argc, char *argv[])
     char ip[INET_ADDRSTRLEN];
 
     //Now send the rest of the file
-    if(*argv[2] == 't'){
+    if(flag == 't'){
         
         /* prep for encyption*/
 
@@ -209,7 +210,7 @@ int main(int argc, char *argv[])
             close(new_fd);
         }
     }
-    else if(*argv[2] == 'f'){
+    else if(flag == 'f'){
         //First we send the size of the file
         sin_size = sizeof client_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&client_addr, &sin_size);
