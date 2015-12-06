@@ -65,6 +65,9 @@ addrinfo* create_connection(addrinfo *servinfo, int &sock){
 
 int main(int argc, char *argv[])
 {
+    OpenSSL_add_all_algorithms(); //
+    OPENSSL_config(NULL);   //
+
     int sockfd, numbytes;  
     struct addrinfo connection; // Defines the connection type
     struct addrinfo *servinfo; // Contains structs for making connection
@@ -101,13 +104,18 @@ int main(int argc, char *argv[])
     freeaddrinfo(servinfo); // Dlete this struct
 
     if(*argv[2] == 'f'){
+
+        //initializations
+        unsigned char *key1 = (unsigned char *)KEY; //key pointer
+        unsigned char *iv1 = (unsigned char *)IV; // IV pointer
+
         char buffer[BUFSIZ];
 
-        recv(sockfd, buffer, BUFSIZ-1, 0);
-        int file_size = atoi(buffer);
+        recv(sockfd, &buffer, BUFSIZ-1, 0);
+        int file_size1 = atoi(buffer);
 
-        printf("File size: %d\n", file_size);
-
+        printf("File size: %d\n", file_size1);
+        printf("test");
         FILE *received_file = fopen(OUTPUT_FILE_NAME, "w");
 
         if(received_file == NULL){
@@ -115,20 +123,24 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        int remaining_data = file_size;
-
-        while(((numbytes = recv(sockfd, buffer, BUFSIZ-1, 0) > 0) && (remaining_data > 0))) {
-            printf("%s\n", buffer);
-            //Decrypt the buffere here!
+        int remaining_data = file_size1;
+        unsigned char *output = (unsigned char *)malloc(file_size1);
 
 
-            int test = fwrite(&buffer, sizeof(char), file_size, received_file);
+        while(((numbytes = recv(sockfd, (unsigned char *)buffer, BUFSIZ-1, 0) > 0) && (remaining_data > 0))) {
+
+            printf("test here \n");
+            int outlen = strdecrypt((unsigned char *)buffer,file_size1, key1, iv1, (unsigned char *)output);
+            printf("test here \n");
+            int test = fwrite(output, sizeof(char), outlen+1, received_file);
+            
+            //int test = fwrite(&buffer, sizeof(char), file_size1, received_file);
             printf("Bytes written %d\n", test);
             if(test < numbytes){
                 perror("Write fail");
             }
             remaining_data -= numbytes;
-            printf("Received");
+            printf("Received\n");
         }
         fclose(received_file);
 
@@ -143,14 +155,14 @@ int main(int argc, char *argv[])
         }
         /* prep for encyption*/
 
-        unsigned char *key = (unsigned char *)KEY; //key pointer
-        unsigned char *iv = (unsigned char *)IV; // IV pointer
+        unsigned char *key1 = (unsigned char *)KEY; //key pointer
+        unsigned char *iv1 = (unsigned char *)IV; // IV pointer
         //initializations
         OpenSSL_add_all_algorithms(); //
         OPENSSL_config(NULL);   //
-        unsigned char output[BUFSIZ];
+        unsigned char *output= (unsigned char *)malloc(BUFSIZ);
         
-        int outlen = strdecrypt(buffer, numbytes, key, iv, output);
+        int outlen = strdecrypt(buffer, numbytes, key1, iv1, output);
 
         output[outlen] = '\0';
 
