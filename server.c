@@ -23,7 +23,7 @@
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
-#include <openssl/err.h>
+// #include <openssl/err.h>
 
 // keys should be hidden
 /*
@@ -40,7 +40,7 @@ iv =692E3E442B68A2E2A89D3D4DAC7A418D
 #define BACKLOG 10     // how many pending connections queue will hold
 #define FILE_NAME "test_msg.txt"
 
-/* encryption function */
+/* encryption function for string */
 
 int strencrypt(unsigned char *inputstr, int inputstrlen, unsigned char *key, unsigned char *iv, unsigned char *encout){
     int inlen, encoutlen;
@@ -99,8 +99,6 @@ void sendstring(int sock, unsigned char* string, int len){
 
 int main(int argc, char *argv[])
 {
-    OpenSSL_add_all_algorithms(); //
-    OPENSSL_config(NULL);   //
     int sockfd, new_fd;  // Listen on sock_fd, new connection on new_fd
     int file;
 
@@ -134,17 +132,17 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // Delete struct
 
-    // if((argc == 2) && (*argv[1] == 'f')){
-    //     if((file = open(FILE_NAME, O_RDONLY)) == -1){
-    //         perror("file open error");
-    //         return 1;
-    //     }
+    if((argc == 2) && (*argv[1] == 'f')){
+        if((file = open(FILE_NAME, O_RDONLY)) == -1){
+            perror("file open error");
+            return 1;
+        }
 
-    //     if(fstat(file, &file_stats) == -1){
-    //         perror("file stat");
-    //         return 1;
-    //     }
-    // }
+        if(fstat(file, &file_stats) == -1){
+            perror("file stat");
+            return 1;
+        }
+    }
 
     if (bound == NULL)  {
         fprintf(stderr, "server: failed to bind\n");
@@ -190,8 +188,8 @@ int main(int argc, char *argv[])
         // set up output to be sent to client
         unsigned char sendbuff[2048];
         int outlen = strencrypt(inputstr, strlen ((char *)inputstr), key, iv, sendbuff);
-        printf("Encrypted string: %s\n", sendbuff);
-        //BIO_dump_fp (stdout, (const char *)sendbuff, outlen);
+        printf("Encrypted string: \n");
+        BIO_dump_fp (stdout, (const char *)sendbuff, outlen);
 
         while(1) {  // Accept connection
             sin_size = sizeof client_addr;
@@ -214,23 +212,6 @@ int main(int argc, char *argv[])
         }
     }
     else if((argc == 2) && (*argv[1] == 'f')){
-        unsigned char *key = (unsigned char *)KEY; //key pointer
-        unsigned char *iv = (unsigned char *)IV; // IV pointer
-
-
-        if((file = open(FILE_NAME, O_RDONLY)) == -1){
-            perror("file open error");
-            return 1;
-        }
-
-        if(fstat(file, &file_stats) == -1){
-            perror("file stat");
-            return 1;
-        }
-
-        
-        //initializations
-
         sprintf(file_size, "%d", (int)file_stats.st_size);
         //First we send the size of the file
         sin_size = sizeof client_addr;
@@ -243,58 +224,65 @@ int main(int argc, char *argv[])
         inet_ntop(client_addr.ss_family, &((struct sockaddr_in*)&client_addr)->sin_addr, ip, sizeof ip);
 
         printf("server: got connection from %s\n", ip);
-
-        // int sent = send(new_fd, file_size, sizeof(file_size), 0);
-        // if ( sent == -1){ //Transmit data, which is stored as a char pointer
-        //     perror("sending file size");
-        // }
-
-        printf("File size: %d\n", atoi(file_size));
-
+        
         off_t offset = 0;
+        int sent = 0;
         int remaining_data = file_stats.st_size;
         printf("remaining_data = %d\n", remaining_data);
         //Open the file using read(), encrypt it, then write(), pretty sure that will work for passing it to the sendfile function.
         //Alternatively look into openssl like we talked about.
 
-        // set up input  and output space for be encryption
-        unsigned char *inputstr = (unsigned char *)malloc(file_stats.st_size-1); //make a place to store the file
+        unsigned char *key = (unsigned char *)KEY; //key pointer
+        unsigned char *iv = (unsigned char *)IV; // IV pointer
+        //initializations
+        OpenSSL_add_all_algorithms(); //
+        OPENSSL_config(NULL);   //
+        // set up input to be encrypted
+
+        unsigned char *inputstr = (unsigned char *)malloc(file_stats.st_size); //make a place to store the file
         unsigned char *sendbuff = (unsigned char *)malloc(file_stats.st_size+16);
-        
-        // create temp file descriptor 
         char name[] = "/tmp/fileXXXXXX";
-        int out_fd =  mkstemp(name);    
+        int out_fd =  mkstemp(name);//open("output", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        
+        int size = read(file, (unsigned char *)inputstr, ((unsigned int)file_stats.st_size));
 
-        int size = read(file, inputstr, ((unsigned int)file_stats.st_size-1));
+        //printf("nonEncrypted string: \n%s\n", inputstr);
 
-        // perform encryption and write out to out_fd
-        int outlen = strencrypt((unsigned char*)inputstr, size, key, iv, (unsigned char *)sendbuff);
+        int outlen = strencrypt(inputstr, size, key, iv, sendbuff);
 
         sprintf(file_size, "%d", outlen);
-        sendstring(new_fd, (unsigned char *)file_size,sizeof(file_size));
-        int sent1 = send(new_fd, file_size, sizeof(file_size), 0);
-        if ( sent1 == -1){ //Transmit data
+
+        sent = send(new_fd, file_size, strlen(file_size), 0);
+        if ( sent == -1){ //Transmit data, which is stored as a char pointer
             perror("sending file size");
         }
+        
+        //printf("File size: %d\n", atoi(file_size));
+        sent = 0;
 
-        int outsize = write(out_fd, sendbuff, outlen);
-        // BIO_dump_fp (stdout, (const char *)sendbuff, outsize);
-        sendfile(new_fd, out_fd, &offset, outlen);
+        int outsize = write(out_fd, (unsigned char *)sendbuff, outlen);
 
-        int sent = 0;
+        
+        /* Debugging */
+        printf("Encrypted string: \n");
+        BIO_dump_fp (stdout, (const char *)sendbuff, outsize);
+        /* Debugging */
+        remaining_data = outsize;
         while(((sent = sendfile(new_fd, out_fd, &offset, outsize)) > 0) && (remaining_data > 0)){
-            printf("Sent %d bytes, offset = %d, %d bytes left\n", sent, (int)offset, remaining_data);
+            //printf("Sent %d bytes, offset = %d, %d bytes left\n", sent, (int)offset, remaining_data);
             remaining_data -= sent;
+            //sent = sendfile(new_fd, out_fd, &offset, outsize);
         }
         if(sent == -1){
             perror("Sendfile");
         }
         printf("Sent\n");
         //printf("remaining_data = %d\n", remaining_data);
+        unlink(name);
+        close(out_fd);
         close(sockfd); // Child process does not need alistener
         close(new_fd);
 
     }
     return 0;
 }
-

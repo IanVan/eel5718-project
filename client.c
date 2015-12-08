@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+
 /*ENCRYPTION*/
 
 #include <openssl/conf.h>
@@ -65,10 +66,8 @@ addrinfo* create_connection(addrinfo *servinfo, int &sock){
 
 int main(int argc, char *argv[])
 {
-    OpenSSL_add_all_algorithms(); //
-    OPENSSL_config(NULL);   //
-
-    int sockfd, numbytes;  
+    int sockfd; 
+    ssize_t numbytes;  
     struct addrinfo connection; // Defines the connection type
     struct addrinfo *servinfo; // Contains structs for making connection
     struct addrinfo *connected; // Stores result of connection operation
@@ -101,21 +100,16 @@ int main(int argc, char *argv[])
     inet_ntop(connected->ai_family, ((struct sockaddr_in*)connected->ai_addr), ip, sizeof ip); // Create aan IP address
     printf("client: connecting to %s\n", ip);
 
-    freeaddrinfo(servinfo); // Dlete this struct
+    //freeaddrinfo(servinfo); // Dlete this struct
 
     if(*argv[2] == 'f'){
-
-        //initializations
-        unsigned char *key1 = (unsigned char *)KEY; //key pointer
-        unsigned char *iv1 = (unsigned char *)IV; // IV pointer
-
         char buffer[BUFSIZ];
 
-        recv(sockfd, &buffer, BUFSIZ-1, 0);
-        int file_size1 = atoi(buffer);
+        recv(sockfd, buffer, BUFSIZ-1, 0);
+        int file_size = atoi(buffer);
 
-        printf("File size: %d\n", file_size1);
-        printf("test");
+        //printf("File size: %d\n", file_size);
+
         FILE *received_file = fopen(OUTPUT_FILE_NAME, "w");
 
         if(received_file == NULL){
@@ -123,24 +117,34 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        int remaining_data = file_size1;
-        unsigned char *output = (unsigned char *)malloc(file_size1);
+        int remaining_data = file_size;
 
+        //initializations
+        unsigned char *key = (unsigned char *)KEY; //key pointer
+        unsigned char *iv = (unsigned char *)IV; // IV pointer
+        unsigned char *output = (unsigned char *)malloc(file_size);
+        OpenSSL_add_all_algorithms(); //
+        OPENSSL_config(NULL);   //
 
-        while(((numbytes = recv(sockfd, (unsigned char *)buffer, BUFSIZ-1, 0) > 0) && (remaining_data > 0))) {
-
-            printf("test here \n");
-            int outlen = strdecrypt((unsigned char *)buffer,file_size1, key1, iv1, (unsigned char *)output);
-            printf("test here \n");
-            int test = fwrite(output, sizeof(char), outlen+1, received_file);
+        while(((numbytes = recv(sockfd, (unsigned char*)buffer, BUFSIZ-1, 0) > 0) && (remaining_data > 0))) {
             
-            //int test = fwrite(&buffer, sizeof(char), file_size1, received_file);
-            printf("Bytes written %d\n", test);
+            //Decrypt the buffere here!
+            
+            /* Debugging */
+            printf("Encrypted Input: \n");
+            BIO_dump_fp (stdout, (const char *)buffer, file_size);
+            /* Debugging */
+         
+            int outlen = strdecrypt((unsigned char *)buffer, file_size , key, iv, (unsigned char *)output);
+            
+            int test = fwrite(output, sizeof(char), outlen, received_file);
+            printf("Bytes written: \n%d\n", test);
+            //printf("size of buff %d", BUFSIZ-1);
             if(test < numbytes){
                 perror("Write fail");
             }
             remaining_data -= numbytes;
-            printf("Received\n");
+            printf("Received");
         }
         fclose(received_file);
 
@@ -155,14 +159,14 @@ int main(int argc, char *argv[])
         }
         /* prep for encyption*/
 
-        unsigned char *key1 = (unsigned char *)KEY; //key pointer
-        unsigned char *iv1 = (unsigned char *)IV; // IV pointer
+        unsigned char *key = (unsigned char *)KEY; //key pointer
+        unsigned char *iv = (unsigned char *)IV; // IV pointer
         //initializations
         OpenSSL_add_all_algorithms(); //
         OPENSSL_config(NULL);   //
-        unsigned char *output= (unsigned char *)malloc(BUFSIZ);
+        unsigned char output[BUFSIZ];
         
-        int outlen = strdecrypt(buffer, numbytes, key1, iv1, output);
+        int outlen = strdecrypt(buffer, numbytes, key, iv, output);
 
         output[outlen] = '\0';
 
